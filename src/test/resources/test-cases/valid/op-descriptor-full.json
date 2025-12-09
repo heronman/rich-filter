@@ -1,0 +1,5 @@
+{
+  "op": "gt",
+  "field": "age",
+  "value": 18
+}

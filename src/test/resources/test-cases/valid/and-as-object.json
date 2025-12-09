@@ -1,0 +1,7 @@
+{
+  "and": {
+    "age": { "gt": 18 },
+    "NF": true,
+    "isActive": { "eq": true }
+  }
+}

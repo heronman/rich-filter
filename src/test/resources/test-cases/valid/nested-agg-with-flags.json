@@ -1,0 +1,15 @@
+{
+  "CS": true,
+  "and": [
+    {
+      "or": [
+        { "name": { "like": "%John%" } },
+        { "email": { "like": "%john%" } }
+      ]
+    },
+    {
+      "NF": false,
+      "age": { "gt": 21 }
+    }
+  ]
+}

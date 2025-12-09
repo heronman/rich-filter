@@ -1,0 +1,7 @@
+{
+  "or": [
+    { "CS": false },
+    { "name": { "like": "%john%" } },
+    { "email": { "like": "%gmail.com" } }
+  ]
+}

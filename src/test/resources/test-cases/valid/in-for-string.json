@@ -1,0 +1,5 @@
+{
+  "role": {
+    "nin": ["admin", "superuser"]
+  }
+}

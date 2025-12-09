@@ -1,0 +1,5 @@
+{
+  "NF": true,
+  "NF": false,
+  "age": { "gt": 10 }
+}

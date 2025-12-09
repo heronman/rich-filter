@@ -1,0 +1,81 @@
+filter      = root ;
+
+root        = root-object | root-array ;
+
+root-object = json-object ;           (* interpreted as implicit AND of its items *)
+root-array  = json-array ;            (* interpreted as { "and": root-array }    *)
+
+json-object = "{" [ members ] "}" ;
+members     = member { "," member } ;
+member      = string ":" value ;
+
+json-array  = "[" [ elements ] "]" ;
+elements    = value { "," value } ;
+
+value       = scalar
+            | json-object
+            | json-array ;
+
+scalar      = string | number | "true" | "false" | "null" ;
+
+
+(* DSL layer *)
+
+dsl-node    = flag
+            | field
+            | op
+            | agg ;
+
+flag        = "{" flag-name ":" flag-value "}" ;
+flag-name   = "CS" | "NF" ;
+flag-value  = "true" | "false" | "null" ;  (* semantics depend on flag-name *)
+
+field       = "{" field-name ":" field-body "}" ;
+field-name  = string-except-reserved ;
+
+field-body  = agg
+            | op-descriptor
+            | op
+            | simple-value ;   (* shorthand: eq/in *)
+
+op-name     = "eq" | "ne" | "gt" | "ge" | "lt" | "le" | "in" | "nin" | "like" ;
+
+op          = "{" op-name ":" ( op-descriptor | simple-or-list-value ) "}" ;
+
+op-descriptor = "{"
+                 [ flags-members ]
+                 "value" ":" simple-or-list-value
+                 [ "," "field" ":" field-name ]
+                 [ "," "op" ":" op-name ]   (* only when NOT under op *)
+                "}" ;
+
+agg         = "{" agg-name ":" agg-body "}" ;
+agg-name    = "and" | "or" ;
+agg-body    = agg-array | agg-object ;
+
+agg-array   = "[" agg-element { "," agg-element } "]" ;
+agg-element = flag
+            | field
+            | op
+            | agg
+            | simple-or-list-value ; (* only if field context is defined *)
+
+agg-object  = "{"
+                agg-object-member
+                { "," agg-object-member }
+             "}" ;
+
+agg-object-member = flag | field | op | agg ;
+
+simple-or-list-value = simple-value | list-value ;
+
+simple-value = scalar ;
+list-value   = "[" simple-value { "," simple-value } "]" ;
+
+
+(* Lexical constraints: *)
+
+string-except-reserved =
+    string
+    but not "and","or","CS","NF",
+            "eq","ne","gt","ge","lt","le","in","nin","like" ;

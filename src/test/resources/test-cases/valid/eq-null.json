@@ -1,0 +1,6 @@
+{
+  "and": [
+    { "deletedAt": { "eq": null } },
+    { "blockedAt": { "ne": null } }
+  ]
+}

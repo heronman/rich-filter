@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/filter-dsl.schema.json",
+  "title": "Filter DSL",
+  "description": "JSON filter DSL for DB queries",
+  "type": [
+    "object",
+    "array"
+  ],
+  "definitions": {
+    "flagName": {
+      "type": "string",
+      "enum": [
+        "CS",
+        "NF"
+      ]
+    },
+    "flagValue": {
+      "oneOf": [
+        {
+          "description": "CS flag value",
+          "type": "boolean"
+        },
+        {
+          "description": "NF flag value",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      ]
+    },
+    "flagObject": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "$ref": "#/definitions/flagName"
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/flagValue"
+      }
+    },
+    "fieldName": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "enum": [
+          "and",
+          "or",
+          "CS",
+          "NF",
+          "eq",
+          "ne",
+          "gt",
+          "ge",
+          "lt",
+          "le",
+          "in",
+          "nin",
+          "like"
+        ]
+      }
+    },
+    "scalarValue": {
+      "description": "Plain non-null scalar value",
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "valueForIn": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/scalarValue"
+      }
+    },
+    "valueForOtherOps": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/scalarValue"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "opName": {
+      "type": "string",
+      "enum": [
+        "eq",
+        "ne",
+        "gt",
+        "ge",
+        "lt",
+        "le",
+        "in",
+        "nin",
+        "like"
+      ]
+    },
+    "opValue": {
+      "description": "Bare value used as shorthand in <op>",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/valueForOtherOps"
+        },
+        {
+          "$ref": "#/definitions/valueForIn"
+        }
+      ]
+    },
+    "opDescriptor": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "$ref": "#/definitions/opName"
+        },
+        "field": {
+          "$ref": "#/definitions/fieldName"
+        },
+        "value": {
+          "description": "Operator value (type depends on op, not enforced here)",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/valueForOtherOps"
+            },
+            {
+              "$ref": "#/definitions/valueForIn"
+            }
+          ]
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false,
+      "$comment": "Flags (<flag>) may also appear in this object at the same level as 'op', 'field', 'value'. This is not expressed structurally here; validated at runtime."
+    },
+    "opObject": {
+      "description": "<op> = { <op name>: <object> }",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "$ref": "#/definitions/opName"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/definitions/opDescriptor"
+          },
+          {
+            "$ref": "#/definitions/opValue"
+          }
+        ]
+      }
+    },
+    "fieldObject": {
+      "description": "<field> = { <field name>: <object> }",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "$ref": "#/definitions/fieldName"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/definitions/aggObject"
+          },
+          {
+            "$ref": "#/definitions/opDescriptor"
+          },
+          {
+            "$ref": "#/definitions/opObject"
+          },
+          {
+            "description": "<value> shorthand inside field",
+            "oneOf": [
+              {
+                "$ref": "#/definitions/valueForOtherOps"
+              },
+              {
+                "$ref": "#/definitions/valueForIn"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "aggName": {
+      "type": "string",
+      "enum": [
+        "and",
+        "or"
+      ]
+    },
+    "aggArrayItems": {
+      "description": "Items allowed inside aggregator array",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/flagObject"
+        },
+        {
+          "$ref": "#/definitions/fieldObject"
+        },
+        {
+          "$ref": "#/definitions/opObject"
+        },
+        {
+          "$ref": "#/definitions/aggObject"
+        },
+        {
+          "description": "<value> allowed if field name is already defined (not enforced structurally)",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/valueForOtherOps"
+            },
+            {
+              "$ref": "#/definitions/valueForIn"
+            }
+          ]
+        }
+      ]
+    },
+    "aggObject": {
+      "description": "<agg> = { 'and'|'or': <object> }",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "$ref": "#/definitions/aggName"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "description": "Array form",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/definitions/aggArrayItems"
+            }
+          },
+          {
+            "description": "Object form",
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/flagObject"
+                },
+                {
+                  "$ref": "#/definitions/fieldObject"
+                },
+                {
+                  "$ref": "#/definitions/opObject"
+                },
+                {
+                  "$ref": "#/definitions/aggObject"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "description": "Root object",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/definitions/flagObject"
+          },
+          {
+            "$ref": "#/definitions/fieldObject"
+          },
+          {
+            "$ref": "#/definitions/opObject"
+          },
+          {
+            "$ref": "#/definitions/aggObject"
+          }
+        ]
+      }
+    },
+    {
+      "description": "Root array (implicit AND)",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/definitions/flagObject"
+          },
+          {
+            "$ref": "#/definitions/fieldObject"
+          },
+          {
+            "$ref": "#/definitions/opObject"
+          },
+          {
+            "$ref": "#/definitions/aggObject"
+          }
+        ]
+      }
+    }
+  ]
+}

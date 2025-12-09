@@ -1,0 +1,62 @@
+digraph FilterDSL {
+  rankdir=LR;
+  node [shape=box];
+
+  Root        [label="root (object | array)"];
+  Flag        [label="<flag>"];
+  Field       [label="<field>"];
+  Op          [label="<op>"];
+  Agg         [label="<agg>"];
+  OpDesc      [label="<op descriptor>"];
+  Value       [label="<value>"];
+  FlagName    [label="<flag name> (CS|NF)"];
+  FlagValue   [label="<flag value>"];
+  FieldName   [label="<field name>"];
+  OpName      [label="<op name>"];
+  AggName     [label="'and' | 'or'"];
+
+  Root -> Flag;
+  Root -> Field;
+  Root -> Op;
+  Root -> Agg;
+
+  Flag -> FlagName;
+  Flag -> FlagValue;
+
+  Field -> FieldName;
+  Field -> Agg;
+  Field -> OpDesc;
+  Field -> Op;
+  Field -> Value;
+
+  Op -> OpName;
+  Op -> OpDesc;
+  Op -> Value;
+
+  OpDesc -> OpName;
+  OpDesc -> FieldName;
+  OpDesc -> Value;
+  OpDesc -> Flag;
+
+  Agg -> AggName;
+  Agg -> "AggArrayOrObject";
+
+  "AggArrayOrObject" [shape=diamond, label="array | object"];
+
+  "AggArrayOrObject" -> "AggArray";
+  "AggArrayOrObject" -> "AggObject";
+
+  "AggArray"  [label="agg array [ ... ]"];
+  "AggObject" [label="agg object { ... }"];
+
+  "AggArray"  -> Flag;
+  "AggArray"  -> Field;
+  "AggArray"  -> Op;
+  "AggArray"  -> Agg;
+  "AggArray"  -> Value;
+
+  "AggObject" -> Flag;
+  "AggObject" -> Field;
+  "AggObject" -> Op;
+  "AggObject" -> Agg;
+}
