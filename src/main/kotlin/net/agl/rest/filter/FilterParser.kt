@@ -1,6 +1,5 @@
 package net.agl.rest.filter
 
-import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -23,26 +22,34 @@ class FilterParser {
         ): FilterNode {
             log.debug("Parsing [${path.joinToString(" -> ")}]")
             val (caseSensitive, nullsFirst) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
-            val andOrSingle: (List<FilterNode>) -> FilterNode =
-                { nodes -> if (nodes.size == 1) nodes.first() else AndNode(nodes) }
 
-            val nodes = if (
-                (op == null && field == null && node.isContainerNode) ||
-                (op == null && field != null && field in FilterNode.AGGREGATORS)
-            ) parseList(node, null, caseSensitive, nullsFirst, path = path)
-            else if (
-                (op == null && field != null && node.isContainerNode &&
-                        !OpNode.isValueNode(node) && !OpNode.isValuesArray(node)) ||
-                (op != null && field != null && op in FilterNode.AGGREGATORS)
-            ) parseList(node, field, caseSensitive, nullsFirst, path = path)
-            else listOf()
+            val nodes = when {
+                // root or top-level aggregator (no field/op yet)
+                op == null && field == null && node.isContainerNode ->
+                    parseList(node, null, caseSensitive, nullsFirst, path)
+
+                // field is actually an aggregator name: {"and": [...]}
+                op == null && field in FilterNode.AGGREGATORS ->
+                    parseList(node, null, caseSensitive, nullsFirst, path)
+
+                // nested container under a field, not a value node / values array
+                op == null && field != null && node.isContainerNode &&
+                        !OpNode.isValueNode(node) && !OpNode.isValuesArray(node) ->
+                    parseList(node, field, caseSensitive, nullsFirst, path)
+
+                // aggregator used as "op" under a field: {"age": {"and": [...]}}
+                op in FilterNode.AGGREGATORS && field != null ->
+                    parseList(node, field, caseSensitive, nullsFirst, path)
+
+                else -> listOf()
+            }
 
             return when {
-                op == null && field == null && node.isContainerNode -> andOrSingle(nodes)
+                op == null && field == null && node.isContainerNode -> FilterNode.and(nodes)
 
                 op == null && field != null -> when {
-                    field == "or" -> OrNode(nodes)
-                    field == "and" -> AndNode(nodes)
+                    field == "or" -> FilterNode.or(nodes)
+                    field == "and" -> FilterNode.and(nodes)
 
                     // implicit "in"
                     OpNode.isValuesArray(node) ->
@@ -55,15 +62,15 @@ class FilterParser {
                     OpNode.isValueNode(node) ->
                         OpNode.fromNode(node, field, null, caseSensitive, nullsFirst)
 
-                    node.isContainerNode -> andOrSingle(nodes)
+                    node.isContainerNode -> FilterNode.and(nodes)
 
                     else -> error("Invalid node: $node")
                 }
 
                 op != null && field != null -> when (op) {
                     in OpNode.VALID_OPS -> OpNode.fromNode(node, field, op, caseSensitive, nullsFirst)
-                    "or" -> OrNode(nodes)
-                    "and" -> AndNode(nodes)
+                    "or" -> FilterNode.or(nodes)
+                    "and" -> FilterNode.and(nodes)
                     else -> error("Invalid operator: $op")
                 }
 
@@ -71,15 +78,13 @@ class FilterParser {
             }
         }
 
-        fun parseList(
+        private fun parseList(
             node: JsonNode,
-            field: String? = null, // field name if already set
-            caseSensitive: CaseSensitivity = CaseSensitivity.SENSITIVE,
-            nullsFirst: NullsOrder = NullsOrder.NO_ORDER,
+            field: String?, // field name if already set
+            caseSensitive: CaseSensitivity,
+            nullsFirst: NullsOrder,
             path: List<String> = listOf()
         ): List<FilterNode> {
-            val (caseSensitive, nullsFirst) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
-
             fun scan(key: String, item: JsonNode) = parse(
                 item,
                 if (node.isObject && field == null) key else field,
@@ -98,17 +103,7 @@ class FilterParser {
 
                 else -> error("A container node is expected, got: $node")
             }
-
         }
 
-        fun buildJsonParserErrorMessage(src: String?, e: JsonParseException): String {
-            val sb = StringBuilder(e.originalMessage)
-            sb.append(" at ['").append(e.processor.parsingContext.pathAsPointer()).append("' - ")
-            if (src == null || src.count { it == '\n' } > 0) sb.append("line: ${e.location.lineNr}, column: ${e.location.columnNr}")
-            else sb.append("character: ${e.location.charOffset}")
-            sb.append("]")
-            return sb.toString()
-        }
-
-    }
+     }
 }
