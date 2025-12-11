@@ -1,5 +1,6 @@
 package net.agl.rest.filter
 
+import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -10,7 +11,11 @@ class FilterParser {
         private val log = LoggerFactory.getLogger(FilterParser::class.java)
         private val mapper = ObjectMapper().configure(JsonParser.Feature.STRICT_DUPLICATE_DETECTION, true)
 
-        fun parse(src: String): FilterNode = parse(mapper.readTree(src))
+        fun parse(src: String): FilterNode = try {
+            parse(mapper.readTree(src))
+        } catch (e: JsonParseException) {
+            throw FilterParsingException.wrapJsonParserException(src, e)
+        }
 
         fun parse(
             node: JsonNode,
@@ -53,28 +58,28 @@ class FilterParser {
 
                     // implicit "in"
                     OpNode.isValuesArray(node) ->
-                        OpNode.fromNode(node, field, "in", caseSensitive, nullsFirst)
+                        OpNode.fromNode(node, field, "in", caseSensitive, nullsFirst, path)
 
                     // implicit "equals"
                     !node.isContainerNode ->
-                        OpNode.fromNode(node, field, "eq", caseSensitive, nullsFirst)
+                        OpNode.fromNode(node, field, "eq", caseSensitive, nullsFirst, path)
 
                     OpNode.isValueNode(node) ->
-                        OpNode.fromNode(node, field, null, caseSensitive, nullsFirst)
+                        OpNode.fromNode(node, field, null, caseSensitive, nullsFirst, path)
 
                     node.isContainerNode -> FilterNode.and(nodes)
 
-                    else -> error("Invalid node: $node")
+                    else -> throw FilterParsingException(path.joinToString("/"), "Invalid node: $node")
                 }
 
                 op != null && field != null -> when (op) {
-                    in OpNode.VALID_OPS -> OpNode.fromNode(node, field, op, caseSensitive, nullsFirst)
+                    in OpNode.VALID_OPS -> OpNode.fromNode(node, field, op, caseSensitive, nullsFirst, path)
                     "or" -> FilterNode.or(nodes)
                     "and" -> FilterNode.and(nodes)
-                    else -> error("Invalid operator: $op")
+                    else -> throw FilterParsingException(path.joinToString("/"), "Invalid operator: $op")
                 }
 
-                else -> error("Invalid node: $node")
+                else -> throw FilterParsingException(path.joinToString("/"), "Invalid node: $node")
             }
         }
 
@@ -101,7 +106,7 @@ class FilterParser {
                     .filter { (k, _) -> k !in FilterFlag.VALID_NAMES }
                     .map { (k, v) -> scan(k, v) }
 
-                else -> error("A container node is expected, got: $node")
+                else -> throw FilterParsingException(path.joinToString("/"), "A container node is expected, got: $node")
             }
         }
 

@@ -32,33 +32,38 @@ class OpNode(
             field: String? = null, // field name if already set
             op: String? = null, // operator name if already set
             caseSensitive: CaseSensitivity = CaseSensitivity.SENSITIVE,
-            nullsFirst: NullsOrder = NullsOrder.NO_ORDER
+            nullsFirst: NullsOrder = NullsOrder.NO_ORDER,
+            path: List<String> = listOf()
         ): OpNode {
             if (node.has("field") && field != null)
-                error("Field name is already set, can not override it from the given node")
+                throw FilterParsingException(path.joinToString("/"), "Field name is already set, can not override it from the given node")
             if (!node.has("field") && field == null)
-                error("Field name is not set and is not provided in the node")
+                throw FilterParsingException(path.joinToString("/"), "Field name is not set and is not provided in the node")
             if (node.has("op") && op != null)
-                error("Operator name is already set, can not override it from the given node")
+                throw FilterParsingException(path.joinToString("/"), "Operator name is already set, can not override it from the given node")
             if (!node.has("op") && op == null)
-                error("Operator name is not set and is not provided in the node")
+                throw FilterParsingException(path.joinToString("/"), "Operator name is not set and is not provided in the node")
 
             val (case, nulls) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
 
             val field = field ?: node["field"].asText()
-            val op = op ?: node["op"].asText().also { if (it !in VALID_OPS) error("Invalid operator: $it") }
+            val op = op ?: node["op"].asText().also { if (it !in VALID_OPS) throw FilterParsingException(path.joinToString("/"), "Invalid operator: $it") }
 
-            val value = when {
-                op in COLLECTION_OPS -> when {
-                    isValueNode(node) -> extractArrayValues(node["value"])
-                    else -> extractArrayValues(node)
-                }
+            val value = try {
+                when {
+                    op in COLLECTION_OPS -> when {
+                        isValueNode(node) -> extractArrayValues(node["value"])
+                        else -> extractArrayValues(node)
+                    }
 
-                else -> when {
-                    isValueNode(node) -> extractValue(node["value"])
-                    !node.isContainerNode -> extractValue(node)
-                    else -> error("Invalid value node: $node")
+                    else -> when {
+                        isValueNode(node) -> extractValue(node["value"])
+                        !node.isContainerNode -> extractValue(node)
+                        else -> throw FilterParsingException(path.joinToString("/"), "Invalid value node: $node")
+                    }
                 }
+            } catch (e: IllegalStateException) {
+                throw FilterParsingException(path.joinToString("/"), e.message ?: "Invalid value node: $node")
             }
 
             return OpNode(field, op, value, case, nulls)
