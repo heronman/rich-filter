@@ -22,17 +22,27 @@ class FilterParser {
             path: List<String> = listOf()
         ): FilterNode {
             log.debug("Parsing [${path.joinToString(" -> ")}]")
-
             val (caseSensitive, nullsFirst) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
+            val andOrSingle: (List<FilterNode>) -> FilterNode =
+                { nodes -> if (nodes.size == 1) nodes.first() else AndNode(nodes) }
+
+            val nodes = if (
+                (op == null && field == null && node.isContainerNode) ||
+                (op == null && field != null && field in FilterNode.AGGREGATORS)
+            ) parseList(node, null, caseSensitive, nullsFirst, path = path)
+            else if (
+                (op == null && field != null && node.isContainerNode &&
+                        !OpNode.isValueNode(node) && !OpNode.isValuesArray(node)) ||
+                (op != null && field != null && op in FilterNode.AGGREGATORS)
+            ) parseList(node, field, caseSensitive, nullsFirst, path = path)
+            else listOf()
 
             return when {
-                op == null && field == null && (node.isArray || node.isObject) ->
-                    parseList(node, null, caseSensitive, nullsFirst, path = path)
-                        .let { if (it.size == 1) it.first() else AndNode(it) }
+                op == null && field == null && node.isContainerNode -> andOrSingle(nodes)
 
                 op == null && field != null -> when {
-                    field == "or" -> OrNode(parseList(node, null, caseSensitive, nullsFirst, path = path))
-                    field == "and" -> AndNode(parseList(node, null, caseSensitive, nullsFirst, path = path))
+                    field == "or" -> OrNode(nodes)
+                    field == "and" -> AndNode(nodes)
 
                     // implicit "in"
                     OpNode.isValuesArray(node) ->
@@ -45,16 +55,15 @@ class FilterParser {
                     OpNode.isValueNode(node) ->
                         OpNode.fromNode(node, field, null, caseSensitive, nullsFirst)
 
-                    node.isContainerNode -> parseList(node, field, caseSensitive, nullsFirst, path = path)
-                        .let { if (it.size == 1) it.first() else AndNode(it) }
+                    node.isContainerNode -> andOrSingle(nodes)
 
                     else -> error("Invalid node: $node")
                 }
 
                 op != null && field != null -> when (op) {
                     in OpNode.VALID_OPS -> OpNode.fromNode(node, field, op, caseSensitive, nullsFirst)
-                    "or" -> OrNode(parseList(node, field, caseSensitive, nullsFirst, path = path))
-                    "and" -> AndNode(parseList(node, field, caseSensitive, nullsFirst, path = path))
+                    "or" -> OrNode(nodes)
+                    "and" -> AndNode(nodes)
                     else -> error("Invalid operator: $op")
                 }
 
@@ -74,7 +83,16 @@ class FilterParser {
             return when {
                 node.isArray -> node
                     .filter { !FilterFlag.isPureFlag(it) }
-                    .mapIndexed { i, it -> parse(it, field, null, caseSensitive, nullsFirst, path = path + i.toString()) }
+                    .mapIndexed { i, it ->
+                        parse(
+                            it,
+                            field,
+                            null,
+                            caseSensitive,
+                            nullsFirst,
+                            path = path + i.toString()
+                        )
+                    }
 
                 node.isObject -> node.properties()
                     .filter { (k, _) -> k !in FilterFlag.VALID_NAMES }
