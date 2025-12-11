@@ -1,5 +1,3 @@
-import net.agl.gradle.versionFromGit
-
 plugins {
     kotlin("jvm") version "2.2.21"
     kotlin("plugin.spring") version "2.2.21"
@@ -8,10 +6,10 @@ plugins {
     id("java-library")
     id("idea")
     id("maven-publish")
+    id("net.agl.gradle.git-version-plugin") version "0.3.0-SNAPSHOT"
 }
 
 group = "net.agl.rest.filter"
-version = versionFromGit(project.rootDir.absolutePath)
 description = "AGL Rich Filters for REST"
 
 val kotlinExposedVersion = "0.55.0"
