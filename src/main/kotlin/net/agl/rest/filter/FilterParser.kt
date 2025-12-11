@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.slf4j.LoggerFactory
 
 class FilterParser {
     companion object {
+        private val log = LoggerFactory.getLogger(FilterParser::class.java)
         private val mapper = ObjectMapper().configure(JsonParser.Feature.STRICT_DUPLICATE_DETECTION, true)
 
         fun parse(src: String): FilterNode = parse(mapper.readTree(src))
@@ -19,7 +21,7 @@ class FilterParser {
             nullsFirst: NullsOrder = NullsOrder.NO_ORDER,
             path: List<String> = listOf()
         ): FilterNode {
-            println("Parsing [${path.joinToString(" -> ")}]")
+            log.debug("Parsing [${path.joinToString(" -> ")}]")
 
             val (caseSensitive, nullsFirst) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
 
