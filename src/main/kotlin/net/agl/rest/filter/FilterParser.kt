@@ -80,31 +80,25 @@ class FilterParser {
         ): List<FilterNode> {
             val (caseSensitive, nullsFirst) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
 
+            fun scan(key: String, item: JsonNode) = parse(
+                item,
+                if (node.isObject && field == null) key else field,
+                if (node.isObject && field != null) key else null,
+                caseSensitive, nullsFirst, path = path + key
+            )
+
             return when {
                 node.isArray -> node
                     .filter { !FilterFlag.isPureFlag(it) }
-                    .mapIndexed { i, it ->
-                        parse(
-                            it,
-                            field,
-                            null,
-                            caseSensitive,
-                            nullsFirst,
-                            path = path + i.toString()
-                        )
-                    }
+                    .mapIndexed { i, it -> scan(i.toString(), it) }
 
                 node.isObject -> node.properties()
                     .filter { (k, _) -> k !in FilterFlag.VALID_NAMES }
-                    .map { (k, v) ->
-                        when (field) {
-                            null -> parse(v, k, null, caseSensitive, nullsFirst, path = path + k)
-                            else -> parse(v, field, k, caseSensitive, nullsFirst, path = path + k)
-                        }
-                    }
+                    .map { (k, v) -> scan(k, v) }
 
                 else -> error("A container node is expected, got: $node")
             }
+
         }
 
         fun buildJsonParserErrorMessage(src: String?, e: JsonParseException): String {
