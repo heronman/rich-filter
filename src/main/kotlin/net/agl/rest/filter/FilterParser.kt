@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_CONTAINER_NODE_EXPECTED
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_INVALID_NODE
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_INVALID_OPERATOR
 import org.slf4j.LoggerFactory
 
 class FilterParser {
@@ -25,8 +28,12 @@ class FilterParser {
             nullsFirst: NullsOrder = NullsOrder.NO_ORDER,
             path: List<String> = listOf()
         ): FilterNode {
-            log.debug("Parsing [${path.joinToString(" -> ")}]")
-            val (caseSensitive, nullsFirst) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
+            log.debug("Parsing [${path.joinToString(" -> ")}], node type: ${node.nodeType}")
+            val (caseSensitive, nullsFirst) = try {
+                FilterFlag.fromNode(node, caseSensitive, nullsFirst)
+            } catch (e: IllegalStateException) {
+                throw FilterParsingException(e.message ?: MSG_INVALID_NODE, path, node)
+            }
 
             val nodes = when {
                 // root or top-level aggregator (no field/op yet)
@@ -49,37 +56,42 @@ class FilterParser {
                 else -> listOf()
             }
 
-            return when {
-                op == null && field == null && node.isContainerNode -> FilterNode.and(nodes)
+            return try {
+                when {
+                    op == null && field == null && node.isContainerNode -> FilterNode.and(nodes)
 
-                op == null && field != null -> when {
-                    field == "or" -> FilterNode.or(nodes)
-                    field == "and" -> FilterNode.and(nodes)
+                    op == null && field != null -> when {
+                        field == "or" -> FilterNode.or(nodes)
+                        field == "and" -> FilterNode.and(nodes)
 
-                    // implicit "in"
-                    OpNode.isValuesArray(node) ->
-                        OpNode.fromNode(node, field, "in", caseSensitive, nullsFirst, path)
+                        // implicit "in"
+                        OpNode.isValuesArray(node) ->
+                            OpNode.fromNode(node, field, "in", caseSensitive, nullsFirst, path)
 
-                    // implicit "equals"
-                    !node.isContainerNode ->
-                        OpNode.fromNode(node, field, "eq", caseSensitive, nullsFirst, path)
+                        // implicit "equals"
+                        !node.isContainerNode ->
+                            OpNode.fromNode(node, field, "eq", caseSensitive, nullsFirst, path)
 
-                    OpNode.isValueNode(node) ->
-                        OpNode.fromNode(node, field, null, caseSensitive, nullsFirst, path)
+                        OpNode.isValueNode(node) ->
+                            OpNode.fromNode(node, field, null, caseSensitive, nullsFirst, path)
 
-                    node.isContainerNode -> FilterNode.and(nodes)
+                        node.isContainerNode -> FilterNode.and(nodes)
 
-                    else -> throw FilterParsingException(path.joinToString("/"), "Invalid node: $node")
+                        else -> throw FilterParsingException(MSG_INVALID_NODE, path, node)
+                    }
+
+                    op != null && field != null -> when (op) {
+                        in OpNode.VALID_OPS -> OpNode.fromNode(node, field, op, caseSensitive, nullsFirst, path)
+                        "or" -> FilterNode.or(nodes)
+                        "and" -> FilterNode.and(nodes)
+                        else -> throw FilterParsingException(MSG_INVALID_OPERATOR, path, node)
+                    }
+
+                    else -> throw FilterParsingException(MSG_INVALID_NODE, path, node)
                 }
-
-                op != null && field != null -> when (op) {
-                    in OpNode.VALID_OPS -> OpNode.fromNode(node, field, op, caseSensitive, nullsFirst, path)
-                    "or" -> FilterNode.or(nodes)
-                    "and" -> FilterNode.and(nodes)
-                    else -> throw FilterParsingException(path.joinToString("/"), "Invalid operator: $op")
-                }
-
-                else -> throw FilterParsingException(path.joinToString("/"), "Invalid node: $node")
+            } catch (e: IllegalStateException) {
+                if (e is FilterParsingException) throw e
+                throw FilterParsingException(e.message ?: MSG_INVALID_NODE, path, node)
             }
         }
 
@@ -106,9 +118,9 @@ class FilterParser {
                     .filter { (k, _) -> k !in FilterFlag.VALID_NAMES }
                     .map { (k, v) -> scan(k, v) }
 
-                else -> throw FilterParsingException(path.joinToString("/"), "A container node is expected, got: $node")
+                else -> throw FilterParsingException(MSG_CONTAINER_NODE_EXPECTED, path, node)
             }
         }
 
-     }
+    }
 }

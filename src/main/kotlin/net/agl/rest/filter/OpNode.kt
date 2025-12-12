@@ -2,6 +2,12 @@ package net.agl.rest.filter
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ArrayNode
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_FIELD_NAME_ALREADY_SET
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_INVALID_OPERATOR
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_INVALID_VALUE_NODE
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_MISSING_FIELD_NAME
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_MISSING_OP_NAME
+import net.agl.rest.filter.FilterParsingException.Companion.MSG_OP_NAME_ALREADY_SET
 
 class OpNode(
     val field: String,
@@ -36,18 +42,20 @@ class OpNode(
             path: List<String> = listOf()
         ): OpNode {
             if (node.has("field") && field != null)
-                throw FilterParsingException(path.joinToString("/"), "Field name is already set, can not override it from the given node")
+                throw FilterParsingException(MSG_FIELD_NAME_ALREADY_SET, path, node)
             if (!node.has("field") && field == null)
-                throw FilterParsingException(path.joinToString("/"), "Field name is not set and is not provided in the node")
+                throw FilterParsingException(MSG_MISSING_FIELD_NAME, path, node)
             if (node.has("op") && op != null)
-                throw FilterParsingException(path.joinToString("/"), "Operator name is already set, can not override it from the given node")
+                throw FilterParsingException(MSG_OP_NAME_ALREADY_SET, path, node)
             if (!node.has("op") && op == null)
-                throw FilterParsingException(path.joinToString("/"), "Operator name is not set and is not provided in the node")
+                throw FilterParsingException(MSG_MISSING_OP_NAME, path, node)
 
             val (case, nulls) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
 
             val field = field ?: node["field"].asText()
-            val op = op ?: node["op"].asText().also { if (it !in VALID_OPS) throw FilterParsingException(path.joinToString("/"), "Invalid operator: $it") }
+            val op = op ?: node["op"].asText().also {
+                if (it !in VALID_OPS) throw FilterParsingException(MSG_INVALID_OPERATOR, path, node)
+            }
 
             val value = try {
                 when {
@@ -59,11 +67,12 @@ class OpNode(
                     else -> when {
                         isValueNode(node) -> extractValue(node["value"])
                         !node.isContainerNode -> extractValue(node)
-                        else -> throw FilterParsingException(path.joinToString("/"), "Invalid value node: $node")
+                        else -> throw FilterParsingException(MSG_INVALID_VALUE_NODE, path, node)
                     }
                 }
             } catch (e: IllegalStateException) {
-                throw FilterParsingException(path.joinToString("/"), e.message ?: "Invalid value node: $node")
+                if (e is FilterParsingException) throw e
+                throw FilterParsingException(e.message ?: MSG_INVALID_VALUE_NODE, path, node)
             }
 
             return OpNode(field, op, value, case, nulls)
