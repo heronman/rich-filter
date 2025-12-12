@@ -2,12 +2,6 @@ package net.agl.rest.filter
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ArrayNode
-import net.agl.rest.filter.FilterParsingException.Companion.MSG_FIELD_NAME_ALREADY_SET
-import net.agl.rest.filter.FilterParsingException.Companion.MSG_INVALID_OPERATOR
-import net.agl.rest.filter.FilterParsingException.Companion.MSG_INVALID_VALUE_NODE
-import net.agl.rest.filter.FilterParsingException.Companion.MSG_MISSING_FIELD_NAME
-import net.agl.rest.filter.FilterParsingException.Companion.MSG_MISSING_OP_NAME
-import net.agl.rest.filter.FilterParsingException.Companion.MSG_OP_NAME_ALREADY_SET
 
 class OpNode(
     val field: String,
@@ -17,21 +11,20 @@ class OpNode(
     val nullsOrder: NullsOrder = NullsOrder.NO_ORDER
 ) : FilterNode {
     companion object {
-        val VALID_FIELDS = setOf("field", "op", "value", "CS", "NF")
+        val VALUE_NODE_KEYS = setOf("field", "op", "value", "CS", "NF")
 
         val COLLECTION_OPS = setOf("in", "nin")
         val EQUALITY_OPS = setOf("eq", "ne", "like", "nlike")
         val COMPARISON_OPS = setOf("gt", "ge", "lt", "le")
         val VALID_OPS = EQUALITY_OPS + COLLECTION_OPS + COMPARISON_OPS
 
-        private fun isAbstractOpNode(node: JsonNode): Boolean =
-            node.isObject && (node.fieldNames().asSequence().toSet() - VALID_FIELDS).isEmpty()
-
-        fun isValueNode(node: JsonNode): Boolean =
-            isAbstractOpNode(node) && node.has("value")
+        fun isValueObject(node: JsonNode): Boolean = node.isObject &&
+                node.fieldNames().asSequence().all { it in VALUE_NODE_KEYS } &&
+                node.has("value")
 
         fun isValuesArray(node: JsonNode): Boolean =
-            node.isArray && (node as ArrayNode).elements().asSequence().all { !it.isContainerNode && !it.isNull }
+            node.isArray && (node as ArrayNode).elements().asSequence()
+                .all { FilterFlag.isPureFlag(it) || it.isValueNode && !it.isNull }
 
         fun fromNode(
             node: JsonNode,
@@ -41,38 +34,34 @@ class OpNode(
             nullsFirst: NullsOrder = NullsOrder.NO_ORDER,
             path: List<String> = listOf()
         ): OpNode {
-            if (node.has("field") && field != null)
-                throw FilterParsingException(MSG_FIELD_NAME_ALREADY_SET, path, node)
-            if (!node.has("field") && field == null)
-                throw FilterParsingException(MSG_MISSING_FIELD_NAME, path, node)
-            if (node.has("op") && op != null)
-                throw FilterParsingException(MSG_OP_NAME_ALREADY_SET, path, node)
-            if (!node.has("op") && op == null)
-                throw FilterParsingException(MSG_MISSING_OP_NAME, path, node)
+            if (node.has("field") && field != null) throw OverridingFieldNameException(field, node, path)
+            if (!node.has("field") && field == null) throw MissingFieldNameException(node, path)
+            if (node.has("op") && op != null) throw OverridingOpNameException(op, node, path)
+            if (!node.has("op") && op == null) throw MissingOpNameException(node, path)
 
             val (case, nulls) = FilterFlag.fromNode(node, caseSensitive, nullsFirst)
 
             val field = field ?: node["field"].asText()
             val op = op ?: node["op"].asText().also {
-                if (it !in VALID_OPS) throw FilterParsingException(MSG_INVALID_OPERATOR, path, node)
+                if (it !in VALID_OPS) throw InvalidOperatorException(it, node, path)
             }
 
             val value = try {
                 when {
                     op in COLLECTION_OPS -> when {
-                        isValueNode(node) -> extractArrayValues(node["value"])
+                        isValueObject(node) -> extractArrayValues(node["value"])
                         else -> extractArrayValues(node)
                     }
 
                     else -> when {
-                        isValueNode(node) -> extractValue(node["value"])
-                        !node.isContainerNode -> extractValue(node)
-                        else -> throw FilterParsingException(MSG_INVALID_VALUE_NODE, path, node)
+                        isValueObject(node) -> extractValue(node["value"])
+                        node.isValueNode -> extractValue(node)
+                        else -> throw InvalidValueNodeException(node, path)
                     }
                 }
             } catch (e: IllegalStateException) {
                 if (e is FilterParsingException) throw e
-                throw FilterParsingException(e.message ?: MSG_INVALID_VALUE_NODE, path, node)
+                throw InvalidValueNodeException(node, path, e.message)
             }
 
             return OpNode(field, op, value, case, nulls)
