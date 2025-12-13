@@ -10,3 +10,5 @@ plugins {
 }
 
 rootProject.name = "rich-filter"
+include(":rich-filter")
+include(":exposed-op-builder")

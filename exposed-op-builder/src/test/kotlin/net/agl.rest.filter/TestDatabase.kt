@@ -1,4 +1,4 @@
-package net.agl.auth.persistence.filter
+package net.agl.rest.filter
 
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils

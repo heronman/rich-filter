@@ -12,7 +12,7 @@ import kotlin.reflect.full.isSubclassOf
 
 private typealias ConditionOp = (ExpressionWithColumnType<*>, Any?, Boolean?) -> SqlExpressionBuilder.() -> Op<Boolean>
 
-class ConditionBuilder {
+class ExposedOpBuilder {
     companion object {
 
         fun buildOp(field: OpNode, table: Table): SqlExpressionBuilder.() -> Op<Boolean> {
@@ -21,10 +21,13 @@ class ConditionBuilder {
 
             @Suppress("UNCHECKED_CAST")
             val preparedColumn = if (column.columnType is StringColumnType)
-                (column as ExpressionWithColumnType<String>).lowerCase() else column
+                (column as ExpressionWithColumnType<String>)
+                    .let { if (!field.caseSensitive.asBoolean) it.lowerCase() else it }
+            else column
+
             val preparedValue =
                 if (column.columnType is StringColumnType && field.value is String && !field.caseSensitive.asBoolean)
-                    field.value.lowercase() else field.value
+                    field.value.toString().lowercase() else field.value
 
             return OPS[field.op]?.let {
                 it(preparedColumn, preparedValue, field.nullsOrder.asBoolean)

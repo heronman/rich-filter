@@ -1,4 +1,4 @@
-package net.agl.auth.persistence.filter
+package net.agl.rest.filter
 
 import net.agl.rest.filter.FilterParser.Companion.parse
 import java.io.File

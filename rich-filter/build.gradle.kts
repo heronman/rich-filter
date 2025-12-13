@@ -1,15 +1,13 @@
 plugins {
     kotlin("jvm") version "2.2.21"
+    id("java-library")
     id("idea")
     id("maven-publish")
+    id("net.agl.gradle.git-version-plugin") version "0.3.0-SNAPSHOT"
 }
 
 group = "net.agl.rest.filter"
 description = "AGL Rich Filters for REST"
-
-extra["kotlinExposedVersion"] = "0.55.0"
-extra["jacksonVersion"] = "2.20.1"
-extra["slf4jVersion"] = "2.0.17"
 
 java {
     toolchain {
@@ -22,7 +20,16 @@ repositories {
     maven { url = uri(findProperty("repo.proxy.url")!! as String) }
 }
 
+val slf4jVersion: String by project
+val jacksonVersion: String by project
+
 dependencies {
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jacksonVersion")
+    implementation("org.slf4j:slf4j-api:$slf4jVersion")
+
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 kotlin {

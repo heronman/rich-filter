@@ -1,19 +1,21 @@
-package net.agl.auth.persistence.filter
+package net.agl.rest.filter
 
-import net.agl.rest.filter.ConditionBuilder
-import net.agl.rest.filter.NullsOrder
-import net.agl.rest.filter.OpNode
+import org.jetbrains.exposed.sql.Column
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
+import java.time.Instant
+import java.util.*
 
-class ConditionBuilderTests : TestDatabase() {
+class ExposedOpBuilderTests : TestDatabase() {
 
     @Test
     fun `eq operator generates correct SQL`() = transaction {
         val f = OpNode("age", "eq", 30)
-        val op = ConditionBuilder.buildOp(f, TestUsersTable)
+        val op = ExposedOpBuilder.buildOp(f, TestUsersTable)
         val sql = TestUsersTable.selectAll().where { op(this) }.prepareSQL(this, false)
         assertTrue(sql.contains("AGE = 30"))
     }
@@ -21,7 +23,7 @@ class ConditionBuilderTests : TestDatabase() {
     @Test
     fun `like operator works`() = transaction {
         val f = OpNode("username", "like", "%john%")
-        val op = ConditionBuilder.buildOp(f, TestUsersTable)
+        val op = ExposedOpBuilder.buildOp(f, TestUsersTable)
 
         val sql = TestUsersTable.selectAll().where { op(this) }.prepareSQL(this, false)
 
@@ -32,7 +34,7 @@ class ConditionBuilderTests : TestDatabase() {
     @Test
     fun `gt operator works with nullsFirst true`() = transaction {
         val f = OpNode("age", "gt", 20, nullsOrder = NullsOrder.NULLS_FIRST)
-        val op = ConditionBuilder.buildOp(f, TestUsersTable)
+        val op = ExposedOpBuilder.buildOp(f, TestUsersTable)
 
         val sql = TestUsersTable.selectAll().where { op(this) }.prepareSQL(this, false)
         assertTrue(sql.contains("AGE > 20"))
@@ -40,10 +42,13 @@ class ConditionBuilderTests : TestDatabase() {
 
     @Test
     fun `in operator works`() = transaction {
-        val f = OpNode("id", "in", listOf(1L, 2L, 3L))
-        val op = ConditionBuilder.buildOp(f, TestUsersTable)
+        val uid1 = UUID.randomUUID()
+        val uid2 = UUID.randomUUID()
+        val uid3 = UUID.randomUUID()
+        val f = OpNode("id", "in", listOf(uid1, uid2, uid3))
+        val op = ExposedOpBuilder.buildOp(f, TestUsersTable)
 
         val sql = TestUsersTable.selectAll().where { op(this) }.prepareSQL(this, false)
-        assertTrue(sql.contains("ID IN (1, 2, 3)"))
+        assertTrue(sql.contains("ID IN ('$uid1', '$uid2', '$uid3')"))
     }
 }
